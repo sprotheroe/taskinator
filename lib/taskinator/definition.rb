@@ -52,6 +52,8 @@ module Taskinator
 
           process = factory.call(self, options)
 
+          process.capture_mutables(arg_list, args) if Taskinator.mutable_args
+
           # this may take long... up to users definition
           Taskinator.instrumenter.instrument('taskinator.process.created', :uuid => process.uuid, :state => :initial) do
             Builder.new(process, self, *args).instance_eval(&block)
