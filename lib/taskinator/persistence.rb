@@ -1,4 +1,4 @@
-require 'builder'
+  require 'builder'
 
 module Taskinator
   module Persistence
@@ -126,6 +126,34 @@ module Taskinator
           end
         end
         new_state
+      end
+
+      def persist_mutables(mutables)
+        @updated_at = Time.now.utc
+
+        yaml = Taskinator::Persistence.serialize(mutables)
+
+        # greater than 2 MB?
+        if (yaml.bytesize / (1024.0**2)) > 2
+          Taskinator.logger.warn("Large mutables data detected for '#{self.to_s}'. Consider using intrinsic types instead, or try to reduce the amount of data provided.")
+        end
+
+        Taskinator.redis do |conn|
+          process_key = self.process_key
+          conn.multi do |transaction|
+            transaction.hmset(
+              self.key,
+              :mutables, yaml,
+              :updated_at, @updated_at
+            )
+
+            # also update the "root" process
+            transaction.hset(
+              process_key,
+              :updated_at, @updated_at
+            )
+          end
+        end
       end
 
       # persists the error information

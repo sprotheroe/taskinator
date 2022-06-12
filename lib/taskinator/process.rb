@@ -8,6 +8,7 @@ module Taskinator
     include Workflow
     include Persistence
     include Instrumentation
+    include Mutability
 
     class << self
       def define_sequential_process_for(definition, options={})
@@ -69,6 +70,7 @@ module Taskinator
       visitor.visit_attribute(:queue)
       visitor.visit_attribute_time(:created_at)
       visitor.visit_attribute_time(:updated_at)
+      visitor.visit_args(:mutables) if Taskinator.mutable_args
     end
 
     def <=>(other)

@@ -17,6 +17,7 @@ require 'taskinator/workflow'
 require 'taskinator/visitor'
 require 'taskinator/persistence'
 require 'taskinator/instrumentation'
+require 'taskinator/mutability'
 
 require 'taskinator/task'
 require 'taskinator/tasks'
@@ -121,6 +122,13 @@ module Taskinator
       @instrumenter = value
     end
 
+    attr_reader :mutable_args
+    attr_reader :mutable_args_options_key
+
+    def mutable_args=(hash)
+      @mutable_args = !!hash
+      @mutable_args_options_key = hash.is_a?(Hash) && hash.has_key?(:options_key) ? hash[:options_key].to_sym : :mutable
+    end
   end
 
   class NoOpInstrumenter

@@ -5,6 +5,7 @@ module Taskinator
     include Workflow
     include Persistence
     include Instrumentation
+    include Mutability
 
     class << self
       def define_step_task(process, method, args, options={})
@@ -178,7 +179,10 @@ module Taskinator
       end
 
       def start
+        placeholders = set_mutable_args(args, process.mutables) if Taskinator.mutable_args
         executor.send(method, *args)
+        get_mutable_args(args, placeholders, process) if Taskinator.mutable_args
+
         # ASSUMPTION: when the method returns, the task is considered to be complete
         complete!
 
@@ -229,6 +233,7 @@ module Taskinator
       def start
         # NNB: if other job types are required, may need to implement how they get invoked here!
 
+        placeholders = set_mutable_args(args, process.mutables) if Taskinator.mutable_args
         if job.respond_to?(:perform)
           # resque
           job.perform(*args)
@@ -236,6 +241,7 @@ module Taskinator
           # delayedjob and sidekiq
           job.new.perform(*args)
         end
+        get_mutable_args(args, placeholders, process) if Taskinator.mutable_args
 
         # ASSUMPTION: when the job returns, the task is considered to be complete
         complete!
