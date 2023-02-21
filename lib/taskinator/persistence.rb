@@ -716,35 +716,41 @@ module Taskinator
     class << self
       def serialize(values)
         # special case, convert models to global id's
-        if values.is_a?(Array)
-          values = values.collect {|value|
-            value.respond_to?(:to_global_id) ? value.to_global_id : value
-          }
-        elsif values.is_a?(Hash)
-          values.each {|key, value|
-            values[key] = value.to_global_id if value.respond_to?(:to_global_id)
-          }
-        elsif values.respond_to?(:to_global_id)
-          values = values.to_global_id
-        end
+        values = gidify(values)
         YAML.dump(values)
       end
 
       def deserialize(yaml)
-        values = YAML.load(yaml)
-        if values.is_a?(Array)
-          values = values.collect {|value|
-            (value.respond_to?(:model_id) && value.respond_to?(:find)) ? value.find : value
-          }
-        elsif values.is_a?(Hash)
-          values.each {|key, value|
-            values[key] = value.find if value.respond_to?(:model_id) && value.respond_to?(:find)
-          }
-        elsif values.respond_to?(:model_id) && values.respond_to?(:find)
-          values = values.find
-        end
-        values
+        values = YAML.load(yaml, permitted_classes: [GlobalID, URI::GID, Date, Symbol])
+        degidify(values)
       end
+
+      def gidify(value)
+        if value.is_a?(Array)
+          value = value.collect {|element|
+            gidify(element)
+          }
+        elsif value.is_a?(Hash)
+          value.each {|key, val|
+            value[key] = gidify(val)
+          }
+        end
+        value.respond_to?(:to_global_id) ? value.to_global_id : value
+      end
+
+      def degidify(value)
+        if value.is_a?(Array)
+          value = value.collect {|element|
+            degidify(element)
+          }
+        elsif value.is_a?(Hash)
+          value.each {|key, val|
+            value[key] = degidify(val)
+          }
+        end
+        (value.respond_to?(:model_id) && value.respond_to?(:find)) ? value.find : value
+      end
+
     end
 
   end
