@@ -1,4 +1,4 @@
-  require 'builder'
+require 'builder'
 
 module Taskinator
   module Persistence
@@ -154,6 +154,33 @@ module Taskinator
             )
           end
         end
+      end
+
+      def insert_task_after(existing_task, new_task)
+        @updated_at = Time.now.utc
+        Taskinator.redis do |conn|
+          process_key = self.process_key
+
+          conn.pipelined do |pipeline|
+            visitor = RedisSerializationVisitor.new(pipeline, new_task).visit
+            visitor = RedisSerializationVisitor.new(pipeline, existing_task).visit
+            puts " ~~~~~~~~~~ VISITED TASK ~~~~~~~~~~~~~~~~~~~~~~~~~"
+            #RedisSerializationVisitor.new(pipeline, new_task, visitor).visit
+            pipeline.linsert "#{process_key}:tasks", 'AFTER', existing_task.uuid, new_task.uuid
+            puts "~~~~~~~~~~~~~~~~ INSERTED TASK IN LIST ~~~~~~~~~~~~~~~~~~~"
+
+            pipeline.hincrby(process_key, :tasks_count, 1)
+            pipeline.incrby("#{process_key}.count", 1)
+
+            pipeline.incrby("#{process_key}.pending", 1)
+
+            pipeline.hset(
+              process_key,
+              :updated_at, @updated_at
+            )
+          end
+        end
+
       end
 
       # persists the error information

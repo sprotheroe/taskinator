@@ -39,6 +39,17 @@ module Taskinator
     alias_method :<<, :add
     alias_method :push, :add
 
+    def insert_after(task, new_task)
+      current = @head
+      while current != task
+        current = current.next
+      end
+      new_task.next = current.next
+      current.next = new_task
+      @count += 1
+      new_task
+    end
+
     def empty?
       @head.nil?
     end

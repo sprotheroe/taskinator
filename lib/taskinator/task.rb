@@ -19,6 +19,10 @@ module Taskinator
       def define_sub_process_task(process, sub_process, options={})
         SubProcess.new(process, sub_process, options)
       end
+
+      def define_loop_task(process, method, args, options={})
+        LoopStep.new(process, method, args, options)
+      end
     end
 
     attr_reader :process
@@ -33,7 +37,10 @@ module Taskinator
     attr_accessor :next
 
     def initialize(process, options={})
-      raise ArgumentError, 'process' if process.nil? || !process.is_a?(Process)
+      puts '#####################################################################'
+      puts " PROCESS: #{process}: NIL #{process.nil?}, CLASS #{process.is_a?(Process)}"
+      puts '#####################################################################'
+      ##raise ArgumentError, 'process' if process.nil? || !process.is_a?(Process)
 
       @uuid = "#{process.uuid}:task:#{Taskinator.generate_uuid}"
       @process = process
@@ -309,5 +316,101 @@ module Taskinator
         %(#<#{self.class.name}:0x#{self.__id__.to_s(16)} uuid="#{uuid}", definition=:#{definition}, sub_process=#{sub_process.inspect}, current_state=:#{current_state}>)
       end
     end
+
+    #--------------------------------------------------
+
+    # a task which invokes the specified method on the definition
+    # the args must be intrinsic types, since they are serialized to YAML
+    class LoopStep < Task
+      attr_reader :method
+      attr_reader :args
+      attr_reader :control_method
+      attr_reader :loop_delay
+      attr_reader :options
+
+      def initialize(process, method, args, options={})
+        puts "LOOP STEP ===================================================="
+        puts "PROCESS: #{process} METHOD #{method}"
+        puts "LOOP STEP ===================================================="
+        super(process, options)
+
+        puts "===================================================="
+        puts "ARGS: #{args}"
+        puts "OPTIONS: #{options}"
+        puts "===================================================="
+
+        raise ArgumentError, 'method' if method.nil?
+        raise NoMethodError, method unless executor.respond_to?(method)
+
+        @method = method
+        @args = args
+        @options = options
+        @control_method = options[:until]
+        @loop_delay = options[:every].to_i
+        puts '----------------------------------------------------'
+        puts @control_method
+        puts '----------------------------------------------------'
+      end
+
+      def enqueue
+        Taskinator.queue.enqueue_task(self)
+      end
+
+      def start
+        placeholders = set_mutable_args(args, process.mutables) if Taskinator.mutable_args
+        executor.send(method, *args)
+        get_mutable_args(args, placeholders, process) if Taskinator.mutable_args
+
+        # ASSUMPTION: when the method returns, the task is considered to be complete
+        finished = executor.send(control_method, *args)
+        unless finished
+          puts "looping"
+
+          puts "LOOP STEP ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~"
+          puts "PROCESS: #{process.inspect}"
+          puts "LOOP STEP ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~"
+
+          options = { until: control_method, every: loop_delay }
+
+          next_iteration = LoopStep.new(process, method, args, options)
+          puts "################## CREATED ITERATION TASK ======================"
+          process.tasks.insert_after(self, next_iteration)
+          puts "#################### INSERTED TASK IN MEMORY LIST ======================"
+          process.insert_task_after(self, next_iteration)
+          puts "#################### INSERTED TASK IN REDIS #####################"
+          #next_iteration.save
+          #self.save
+       #   process.update_tasks(process.tasks, process.get_pending+1)
+        else
+          puts "loop complete - continue"
+        end
+        complete!
+
+      rescue => e
+        Taskinator.logger.error(e)
+        Taskinator.logger.debug(e.backtrace)
+        fail!(e)
+        raise e
+      end
+
+      def accept(visitor)
+        super
+        visitor.visit_attribute(:method)
+        visitor.visit_args(:args)
+        visitor.visit_attribute(:control_method)
+        visitor.visit_attribute(:loop_delay)
+        #visitor.visit_args(:options)
+
+      end
+
+      def executor
+        @executor ||= Taskinator::Executor.new(definition, self)
+      end
+
+      def inspect
+        %(#<#{self.class.name}:0x#{self.__id__.to_s(16)} uuid="#{uuid}", definition=:#{definition}, method=:#{method}, args=#{args}, current_state=:#{current_state}>)
+      end
+    end
+
   end
 end

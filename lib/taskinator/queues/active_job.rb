@@ -20,8 +20,13 @@ module Taskinator
 
       def enqueue_task(task)
         queue = task.queue || @config[:task_queue]
-        TaskWorker.set(:queue => queue)
-          .perform_later(task.uuid)
+        params = { queue: queue }
+        if task.respond_to?(:loop_delay)
+          params[:wait] = task.loop_delay.to_i
+        end
+        TaskWorker.set(params).perform_later(task.uuid)
+        #TaskWorker.set(:queue => queue)
+        #  .perform_later(task.uuid)
       end
 
       class CreateProcessWorker < ApplicationJob

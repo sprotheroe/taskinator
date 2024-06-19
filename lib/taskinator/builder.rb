@@ -98,6 +98,15 @@ module Taskinator
       nil
     end
 
+    # defines a task which executes the given @method in a loop, with a specified delay, until the condition is met
+    def loop_task(method, options={})
+      raise ArgumentError, 'method' if method.nil?
+      raise NoMethodError, method unless @executor.respond_to?(method)
+
+      define_loop_task(@process, method, @args, options)
+      nil
+    end
+
   private
 
     def define_step_task(process, method, args, options={})
@@ -114,6 +123,12 @@ module Taskinator
 
     def define_sub_process_task(process, sub_process, options={})
       Task.define_sub_process_task(process, sub_process, combine_options(options))
+    end
+
+    def define_loop_task(process, method, args, options={})
+      define_task(process) {
+        Task.define_loop_task(process, method, args, combine_options(options))
+      }
     end
 
     def define_task(process)
